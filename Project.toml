@@ -1,0 +1,13 @@
+name = "NonconvexTOBS"
+uuid = "6c0b5230-d4c9-466e-bfd4-b31e6272ab65"
+authors = ["Mohamed Tarek <mohamed82008@gmail.com> and contributors"]
+version = "0.1.0"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
