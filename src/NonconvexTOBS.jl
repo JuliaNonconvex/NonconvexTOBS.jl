@@ -4,6 +4,7 @@ export TOBSAlg, TOBSOptions
 
 using Reexport, Parameters, SparseArrays, Zygote, JuMP, Cbc
 @reexport using NonconvexCore
+const Model = JuMP.Model
 using NonconvexCore: @params, VecModel, AbstractResult
 using NonconvexCore: AbstractOptimizer, CountingFunction
 using NonconvexCore: nvalues, fill_indices!, add_values!, _dot
@@ -16,14 +17,15 @@ struct TOBSOptions
 end
 
 function TOBSOptions(
-    ;β::Real = 0.1, # move limit parameter
+    ;β::Real = 0.05, # move limit parameter
     N::Int = 5, # number of past iterations for moving average calculation
     τ::Real = 0.0001, # convergence parameter (upper bound of error)
-    ϵ::Real = 0.01, # constraint relaxation parameter
-    timeLimit::Real = 1.0,
+    ϵ::Real = 0.1, # constraint relaxation parameter
+    timeLimit::Real = 5.0,
     optimizer = Cbc.Optimizer,
+    maxIter::Int = 200
 )
-    return TOBSOptions((; β, N, τ, ϵ, timeLimit, optimizer))
+    return TOBSOptions((; β, N, τ, ϵ, timeLimit, optimizer, maxIter))
 end
 
 @params mutable struct TOBSWorkspace <: Workspace
@@ -47,7 +49,7 @@ end
 function optimize!(workspace::TOBSWorkspace)
     @unpack model, x0, options, counter = workspace
     counter[] = 0
-    @unpack β, N, τ, ϵ, timeLimit, optimizer = options.nt
+    @unpack β, N, τ, ϵ, timeLimit, optimizer, maxIter = options.nt
     milp_solver = optimizer_with_attributes(optimizer)
     numVars = length(NonconvexCore.getinit(model))
     count = 1 # iteration counter
@@ -61,7 +63,7 @@ function optimize!(workspace::TOBSWorkspace)
     currentConstr = model.ineq_constraints(x)
 
     m = JuMP.Model(milp_solver)
-    while τ < er || any(currentConstr .> 0)
+    while (τ < er || any(currentConstr .> 0)) && count < maxIter
         count > 1 && (m = JuMP.Model(milp_solver))
         set_optimizer_attribute(m, "logLevel", 0)
         set_optimizer_attribute(m, "seconds", timeLimit)
@@ -100,7 +102,7 @@ function optimize!(workspace::TOBSWorkspace)
             er = abs(sum([comps[i] - comps[i - 1] for i in 2:N])) / sum(comps)
         end
         
-        @info "iter = $count, obj = $(round.(comps[end]; digits=3)), constraint violation norm = $(round(norm(currentConstr), digits=3)), er = $(round(er, digits=3))"
+        @info "iter = $count, obj = $(round.(comps[end]; digits=3)), constr_vio_norm = $(round(norm(currentConstr), digits=3)), er = $(round(er, digits=3)) Δ = $(Δ[1])"
         count += 1
     end
 
