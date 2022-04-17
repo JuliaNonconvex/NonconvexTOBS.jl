@@ -16,14 +16,14 @@ struct TOBSOptions
 end
 
 function TOBSOptions(
-    ;movelimit::Real = 0.05, # move limit parameter
+    ;movelimit::Real = 0.1, # move limit parameter
     pastN::Int = 20, # number of past iterations for moving average calculation
     convParam::Real = 0.001, # convergence parameter (upper bound of error)
-    constrRelax::Real = 0.05, # constraint relaxation parameter
+    constrRelax::Real = 0.1, # constraint relaxation parameter
     timeLimit::Real = 1.0,
     optimizer = Cbc.Optimizer,
     maxiter::Int = 200,
-    timeStable::Bool = false
+    timeStable::Bool = true
 )
     return TOBSOptions((; movelimit, pastN, convParam, constrRelax, timeLimit, optimizer, maxiter, timeStable))
 end
@@ -55,7 +55,7 @@ function optimize!(workspace::TOBSWorkspace)
     if any(NonconvexCore.getmin(model) .!= 0) || any(NonconvexCore.getmax(model) .!= 1)
         throw(ArgumentError("Lower bound must be 0 and upper bound must be 1."))
     end
-    er = 1
+    er = 1.0
     x = ones(numVars)
     currentConstr, jacConstr = NonconvexCore.value_jacobian(model.ineq_constraints, x)
     objval, objgrad = NonconvexCore.value_gradient(getobjective(model), x)

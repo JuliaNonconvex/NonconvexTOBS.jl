@@ -30,9 +30,10 @@ using NonconvexTOBS, TopOpt, LinearAlgebra, Test, GLMakie
     Nonconvex.add_ineq_constraint!(m, constr)
 
     options = TOBSOptions(;
-        constrRelax = 0.01,
-        movelimit = 1,
-        timeStable = true
+        constrRelax = 0.1,
+        movelimit = 0.1,
+        timeStable = true,
+        timeLimit = 1.0
     )
     TopOpt.setpenalty!(solver, p)
     # TOBS
