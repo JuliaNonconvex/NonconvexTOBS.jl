@@ -1,61 +1,44 @@
 using NonconvexTOBS, TopOpt, LinearAlgebra, Test, GLMakie
 
 @testset "Example" begin
-    E = 1.0 # Young’s modulus
-    v = 0.3 # Poisson’s ratio
-    f = 1.0 # downward force
-    rmin = 6.0 # filter radius
-    xmin = 0.001 # minimum density
-    V = 0.5 # maximum volume fraction
-    p = 3.0 # penalty
 
-    # problem_size = (60, 20)
-    # x0 = fill(1.0, prod(problem_size)) # initial design
-    # problem = HalfMBB(Val{:Linear}, problem_size, (1.0, 1.0), E, v, f)
+  # Recreating cantilever problem from original paper
 
-    global problem_size = (160, 100)
-    x0 = fill(1.0, prod(problem_size)) # initial design
-    problem = PointLoadCantilever(Val{:Linear}, problem_size, (1.0, 1.0), E, v, f)
+  E = 1.0 # Young’s modulus
+  v = 0.3 # Poisson’s ratio
+  f = 1.0 # downward force
+  rmin = 6.0 # filter radius
+  xmin = 0.001 # minimum density
+  V = 0.5 # maximum volume fraction
+  p = 3.0 # topological optimization penalty
 
-    solver = FEASolver(Direct, problem; xmin=xmin)
-    cheqfilter = DensityFilter(solver; rmin=rmin)
-    comp = TopOpt.Compliance(problem, solver)
+  # Define FEA problem
+  problem_size = (160, 100) # size of rectangular mesh
+  x0 = fill(1.0, prod(problem_size)) # initial design
+  problem = PointLoadCantilever(Val{:Linear}, problem_size, (1.0, 1.0), E, v, f)
 
-    obj(x) = comp(cheqfilter(x)) # compliance objective
+  # solve FEA problem
+  solver = FEASolver(Direct, problem; xmin=xmin)
+  cheqfilter = DensityFilter(solver; rmin=rmin) # filter function
+  comp = TopOpt.Compliance(problem, solver) # compliance function
 
-    constr(x) = sum(cheqfilter(x)) / length(x) - V # volume fraction constraint
+  obj(x) = comp(cheqfilter(x)) # compliance objective
 
-    m = Model(obj)
-    addvar!(m, zeros(length(x0)), ones(length(x0)))
-    Nonconvex.add_ineq_constraint!(m, constr)
+  constr(x) = sum(cheqfilter(x)) / length(x) - V # volume fraction constraint
 
-    options = TOBSOptions(;
-        constrRelax = 0.1,
-        movelimit = 0.1,
-        timeStable = true,
-        timeLimit = 1.0
-    )
-    TopOpt.setpenalty!(solver, p)
-    # TOBS
-    @time r = Nonconvex.optimize(m, TOBSAlg(), x0; options=options)
+  # Optimization setup
+  m = Model(obj) # create optimization model
+  addvar!(m, zeros(length(x0)), ones(length(x0))) # setup optimization variables
+  Nonconvex.add_ineq_constraint!(m, constr) # setup volume inequality constraint
+  options = TOBSOptions() # optimization options with default values
+  TopOpt.setpenalty!(solver, p)
+  
+  # Perform TOBS optimization
+  @time r = Nonconvex.optimize(m, TOBSAlg(), x0; options=options)
 
-    @show obj(r.minimizer)
-    @show constr(r.minimizer)
-    global topology = r.minimizer
+  # Results
+  @show obj(r.minimizer)
+  @show constr(r.minimizer)
+  topology = r.minimizer
+  
 end
-
-function dispQuad(nelx,nely,vec)
-    # nelx = number of elements along x axis (number of columns in matrix)
-    # nely = number of elements along y axis (number of lines in matrix)
-    # vec = vector of scalars, each one associated to an element.
-      # this vector is already ordered according to element IDs
-    quadVec=zeros(nely,nelx)
-    for i in 1:nely
-      for j in 1:nelx
-        quadVec[nely-(i-1),j] = vec[(i-1)*nelx+1+(j-1)]
-      end
-    end
-    display(heatmap(1:nelx,1:nely,quadVec'))
-end
-
-dispQuad(problem_size...,topology)
