@@ -23,16 +23,17 @@ using NonconvexTOBS, TopOpt, LinearAlgebra, Test, GLMakie
   comp = TopOpt.Compliance(problem, solver) # compliance function
 
   obj(x) = comp(cheqfilter(x)) # compliance objective
-
   constr(x) = sum(cheqfilter(x)) / length(x) - V # volume fraction constraint
 
   # Optimization setup
-  m = Model(obj) # create optimization model
+  using NonconvexUtils
+  tobj = TraceFunction(obj, on_grad = true)
+  m = Model(tobj) # create optimization model
   addvar!(m, zeros(length(x0)), ones(length(x0))) # setup optimization variables
   Nonconvex.add_ineq_constraint!(m, constr) # setup volume inequality constraint
   options = TOBSOptions() # optimization options with default values
   TopOpt.setpenalty!(solver, p)
-  
+
   # Perform TOBS optimization
   @time r = Nonconvex.optimize(m, TOBSAlg(), x0; options=options)
 

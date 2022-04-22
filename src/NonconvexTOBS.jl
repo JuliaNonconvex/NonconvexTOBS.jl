@@ -2,7 +2,7 @@ module NonconvexTOBS
 
 export TOBSAlg, TOBSOptions
 
-using Reexport, Parameters, SparseArrays, Zygote, Cbc
+using Reexport, Parameters, SparseArrays, Cbc
 @reexport using NonconvexCore
 using NonconvexCore: @params, VecModel, AbstractResult
 using NonconvexCore: AbstractOptimizer, CountingFunction
