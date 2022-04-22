@@ -1,6 +1,9 @@
 # NonconvexTOBS
 
-The method of topological optimization of binary structures ([TOBS](https://www.sciencedirect.com/science/article/abs/pii/S0168874X17305619?via%3Dihub)) was originally developed in the context of optimal distribution of material in mechanical components. This package generalizes the heuristic to mixed integer nonlinear programming problems.
+[![CI](https://github.com/JuliaNonconvex/NonconvexTOBS.jl/workflows/CI/badge.svg?branch=main)](https://github.com/JuliaNonconvex/NonconvexTOBS.jl/actions?query=workflow%3ACI)
+[![Coverage](https://codecov.io/gh/JuliaNonconvex/NonconvexTOBS.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/JuliaNonconvex/NonconvexTOBS.jl)
+
+The method of topological optimization of binary structures ([TOBS](https://www.sciencedirect.com/science/article/abs/pii/S0168874X17305619?via%3Dihub)) was originally developed in the context of optimal distribution of material in mechanical components. This package generalizes the heuristic to binary nonlinear programming problems.
 
 ## Example: use TOBS to optimize cantilever beam
 

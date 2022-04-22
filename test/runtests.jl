@@ -1,4 +1,4 @@
-using NonconvexTOBS, TopOpt, LinearAlgebra, Test, GLMakie
+using NonconvexTOBS, TopOpt, Test
 
 @testset "Example" begin
 
@@ -17,7 +17,7 @@ using NonconvexTOBS, TopOpt, LinearAlgebra, Test, GLMakie
   x0 = fill(1.0, prod(problem_size)) # initial design
   problem = PointLoadCantilever(Val{:Linear}, problem_size, (1.0, 1.0), E, v, f)
 
-  # solve FEA problem
+  # define FEA solver and auxiliary functions
   solver = FEASolver(Direct, problem; xmin=xmin)
   cheqfilter = DensityFilter(solver; rmin=rmin) # filter function
   comp = TopOpt.Compliance(problem, solver) # compliance function
