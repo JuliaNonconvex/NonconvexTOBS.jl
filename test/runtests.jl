@@ -1,4 +1,4 @@
-using NonconvexTOBS, TopOpt
+using NonconvexTOBS, TopOpt, Test
 
 @testset "Example" begin
 
