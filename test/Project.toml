@@ -1,3 +1,4 @@
 [deps]
+NonconvexUtils = "c48e48a2-1f5e-44ff-8799-c8e168d11d1b"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 TopOpt = "53a1e1a5-51bb-58a9-8a02-02056cc81109"
