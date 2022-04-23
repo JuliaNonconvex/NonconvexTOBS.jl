@@ -7,6 +7,14 @@ The method of topological optimization of binary structures ([TOBS](https://www.
 
 ## Example: use TOBS to optimize cantilever beam
 
+Begin by installing the base package and what's necessary for the specific problem:
+
+```julia
+import Pkg
+Pkg.add("NonconvexTOBS")
+Pkg.add("TopOpt")
+```
+
 First, the finite element problem must be built. This is done using [TopOpt.jl](https://github.com/JuliaTopOpt/TopOpt.jl):
 
 ```julia
