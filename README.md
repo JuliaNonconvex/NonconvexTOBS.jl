@@ -67,3 +67,10 @@ TopOpt.setpenalty!(solver, p)
 @show constr(r.minimizer)
 topology = r.minimizer
 ```
+
+Visualizing the results from this example:
+
+![histories](https://user-images.githubusercontent.com/84910559/164938659-797a6a6d-3518-4f7b-a4ff-24b43b822080.png)
+
+https://user-images.githubusercontent.com/84910559/164938672-e90adf1d-06f4-4a46-a956-d017c809d7dc.mp4
+
