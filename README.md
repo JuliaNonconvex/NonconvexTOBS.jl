@@ -42,7 +42,7 @@ cheqfilter = DensityFilter(solver; rmin=rmin) # filter function
 comp = TopOpt.Compliance(problem, solver) # compliance function
 ```
 
-The usual topology optimization problem adresses compliance minimization under volume restriction. Then, the objective and the constraint are:
+The usual topology optimization problem adresses compliance minimization under volume restriction. Therefore, the objective and the constraint are:
 
 ```julia
 obj(x) = comp(cheqfilter(x)) # compliance objective
