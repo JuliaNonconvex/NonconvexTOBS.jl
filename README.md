@@ -72,5 +72,5 @@ Visualizing the results from this example:
 
 ![histories](https://user-images.githubusercontent.com/84910559/164938659-797a6a6d-3518-4f7b-a4ff-24b43b822080.png)
 
-https://user-images.githubusercontent.com/84910559/164938672-e90adf1d-06f4-4a46-a956-d017c809d7dc.mp4
+![gif](https://user-images.githubusercontent.com/19524993/167059067-f08502a8-c62d-4d62-a2df-e132efc5e25c.gif)
 
