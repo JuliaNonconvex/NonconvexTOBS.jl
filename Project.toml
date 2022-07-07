@@ -12,7 +12,7 @@ Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
-Cbc = "1"
+Cbc = "1.0.1"
 JuMP = "1.1"
 NonconvexCore = "1"
 Parameters = "0.12"
