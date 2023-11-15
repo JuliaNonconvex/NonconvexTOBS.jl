@@ -15,17 +15,26 @@ struct TOBSOptions
     nt::NamedTuple # one of the fields of the nt is milp_options
 end
 
-function TOBSOptions(
-    ;movelimit::Real = 0.1, # move limit parameter
+function TOBSOptions(;
+    movelimit::Real = 0.1, # move limit parameter
     pastN::Int = 20, # number of past iterations for moving average calculation
     convParam::Real = 0.001, # convergence parameter (upper bound of error)
     constrRelax::Real = 0.1, # constraint relaxation parameter
     timeLimit::Real = 1.0,
     optimizer = Cbc.Optimizer,
     maxiter::Int = 200,
-    timeStable::Bool = true
+    timeStable::Bool = true,
 )
-    return TOBSOptions((; movelimit, pastN, convParam, constrRelax, timeLimit, optimizer, maxiter, timeStable))
+    return TOBSOptions((;
+        movelimit,
+        pastN,
+        convParam,
+        constrRelax,
+        timeLimit,
+        optimizer,
+        maxiter,
+        timeStable,
+    ))
 end
 
 @params mutable struct TOBSWorkspace <: Workspace
@@ -34,20 +43,29 @@ end
     options::TOBSOptions
 end
 function TOBSWorkspace(
-    model::VecModel, x0::AbstractVector = NonconvexCore.getinit(model);
-    options = TOBSOptions(), kwargs...,
+    model::VecModel,
+    x0::AbstractVector = NonconvexCore.getinit(model);
+    options = TOBSOptions(),
+    kwargs...,
 )
     return TOBSWorkspace(model, copy(x0), options)
 end
 @params struct TOBSResult <: AbstractResult
-    minimizer
-    minimum
-    error
+    minimizer::Any
+    minimum::Any
+    error::Any
 end
 
 function optimize!(workspace::TOBSWorkspace)
     @unpack model, x0, options = workspace
-    @unpack movelimit, pastN, convParam, constrRelax, timeLimit, optimizer, maxiter, timeStable = options.nt
+    @unpack movelimit,
+    pastN,
+    convParam,
+    constrRelax,
+    timeLimit,
+    optimizer,
+    maxiter,
+    timeStable = options.nt
     milp_solver = JuMP.optimizer_with_attributes(optimizer)
     numVars = length(NonconvexCore.getinit(model))
     count = 1 # iteration counter
@@ -70,7 +88,8 @@ function optimize!(workspace::TOBSWorkspace)
         JuMP.set_optimizer_attribute(m, "seconds", timeLimit)
         if !skip_step || count == 1
             if count > 1
-                currentConstr, jacConstr = NonconvexCore.value_jacobian(model.ineq_constraints, x)
+                currentConstr, jacConstr =
+                    NonconvexCore.value_jacobian(model.ineq_constraints, x)
             end
             violation = norm(currentConstr)
             if (violation <= best_sol[4] - 1e-8 || violation < 1e-8 && objval < best_sol[2])
@@ -88,7 +107,7 @@ function optimize!(workspace::TOBSWorkspace)
         JuMP.@constraint(m, deltaX .<= absdeltaX)
         JuMP.@constraint(m, .-deltaX .<= absdeltaX)
         # Constrain amount of change per iteration
-        JuMP.@constraint(m, sum(absdeltaX) <= movelimit*numVars)
+        JuMP.@constraint(m, sum(absdeltaX) <= movelimit * numVars)
         # Constraint relaxation
         Δ = map(currentConstr) do c
             abs(c) < constrRelax ? -c : -constrRelax * c
@@ -122,12 +141,12 @@ function optimize!(workspace::TOBSWorkspace)
             objval, objgrad = NonconvexCore.value_gradient(getobjective(model), x)
             # Apply "time stabilization"
             if timeStable
-                objgrad = (objgrad + pastGrad)/2
+                objgrad = (objgrad + pastGrad) / 2
                 pastGrad = copy(objgrad)
             end
             objHist[end] = objval
             if count > pastN
-                er = abs(sum([objHist[i] - objHist[i - 1] for i in 2:pastN])) / sum(objHist)
+                er = abs(sum([objHist[i] - objHist[i-1] for i = 2:pastN])) / sum(objHist)
             end
             @info "iter = $count, obj = $(round.(objHist[end]; digits=3)), constr_vio_norm = $(round(norm(currentConstr), digits=3)), er = $(round(er, digits=3))"
         end
@@ -136,7 +155,7 @@ function optimize!(workspace::TOBSWorkspace)
     return TOBSResult(best_sol[1], best_sol[2], er)
 end
 
-function Workspace(model::VecModel, optimizer::TOBSAlg, x0::AbstractVector; kwargs...,)
+function Workspace(model::VecModel, optimizer::TOBSAlg, x0::AbstractVector; kwargs...)
     return TOBSWorkspace(model, x0; kwargs...)
 end
 
