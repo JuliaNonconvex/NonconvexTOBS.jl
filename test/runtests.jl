@@ -20,13 +20,12 @@ using NonconvexTOBS, TopOpt, Test
     # define FEA solver and auxiliary functions
     solver = FEASolver(Direct, problem; xmin = xmin)
     cheqfilter = DensityFilter(solver; rmin = rmin) # filter function
-    comp = TopOpt.Compliance(problem, solver) # compliance function
+    comp = TopOpt.Compliance(solver) # compliance function
 
-    obj(x) = comp(cheqfilter(x)) # compliance objective
-    constr(x) = sum(cheqfilter(x)) / length(x) - V # volume fraction constraint
+    obj(x) = comp(cheqfilter(PseudoDensities(x))) # compliance objective
+    constr(x) = sum(cheqfilter(PseudoDensities(x))) / length(x) - V # volume fraction constraint
 
     # Optimization setup
-    using NonconvexUtils
     tobj = TraceFunction(obj, on_grad = true)
     m = Model(tobj) # create optimization model
     addvar!(m, zeros(length(x0)), ones(length(x0))) # setup optimization variables
