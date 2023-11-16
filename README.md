@@ -45,8 +45,8 @@ comp = TopOpt.Compliance(problem, solver) # compliance function
 The usual topology optimization problem adresses compliance minimization under volume restriction. Therefore, the objective and the constraint are:
 
 ```julia
-obj(x) = comp(cheqfilter(x)) # compliance objective
-constr(x) = sum(cheqfilter(x)) / length(x) - V # volume fraction constraint
+obj(x) = comp(cheqfilter(PseudoDensities(x))) # compliance objective
+constr(x) = sum(cheqfilter(PseudoDensities(x))) / length(x) - V # volume fraction constraint
 ```
 
 Finally, the optimization problem is defined and solved:
