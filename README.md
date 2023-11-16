@@ -1,6 +1,6 @@
 # NonconvexTOBS
 
-[![CI](https://github.com/JuliaNonconvex/NonconvexTOBS.jl/workflows/CI/badge.svg?branch=main)](https://github.com/JuliaNonconvex/NonconvexTOBS.jl/actions?query=workflow%3ACI)
+[![CI](https://github.com/JuliaNonconvex/NonconvexTOBS.jl/workflows/CI/badge.svg)](https://github.com/JuliaNonconvex/NonconvexTOBS.jl/actions)
 [![Coverage](https://codecov.io/gh/JuliaNonconvex/NonconvexTOBS.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/JuliaNonconvex/NonconvexTOBS.jl)
 
 The method of topological optimization of binary structures ([TOBS](https://www.sciencedirect.com/science/article/abs/pii/S0168874X17305619?via%3Dihub)) was originally developed in the context of optimal distribution of material in mechanical components. This package implements the heuristic for binary nonlinear programming problems.
