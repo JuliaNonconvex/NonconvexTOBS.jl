@@ -39,7 +39,7 @@ FEA solver and auxiliary functions need to be defined as well:
 ```julia
 solver = FEASolver(Direct, problem; xmin=xmin)
 cheqfilter = DensityFilter(solver; rmin=rmin) # filter function
-comp = TopOpt.Compliance(problem, solver) # compliance function
+comp = TopOpt.Compliance(solver) # compliance function
 ```
 
 The usual topology optimization problem adresses compliance minimization under volume restriction. Therefore, the objective and the constraint are:
