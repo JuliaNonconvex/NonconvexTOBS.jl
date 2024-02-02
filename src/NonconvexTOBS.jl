@@ -2,9 +2,9 @@ module NonconvexTOBS
 
 export TOBSAlg, TOBSOptions
 
-using Reexport, Parameters, SparseArrays, Cbc
+using Reexport, Parameters, SparseArrays, HiGHS
 @reexport using NonconvexCore
-using NonconvexCore: @params, VecModel, AbstractResult
+using NonconvexCore: VecModel, AbstractResult
 using NonconvexCore: AbstractOptimizer, CountingFunction
 import NonconvexCore: optimize!
 import JuMP
@@ -21,7 +21,7 @@ function TOBSOptions(;
     convParam::Real = 0.001, # convergence parameter (upper bound of error)
     constrRelax::Real = 0.1, # constraint relaxation parameter
     timeLimit::Real = 1.0,
-    optimizer = Cbc.Optimizer,
+    optimizer = HiGHS.Optimizer,
     maxiter::Int = 200,
     timeStable::Bool = true,
 )
@@ -37,10 +37,10 @@ function TOBSOptions(;
     ))
 end
 
-@params mutable struct TOBSWorkspace <: Workspace
-    model::VecModel
-    x0::AbstractVector
-    options::TOBSOptions
+mutable struct TOBSWorkspace{TM <: VecModel, TX <: AbstractVector, TO <: TOBSOptions} <: Workspace
+    model::TM
+    x0::TX
+    options::TO
 end
 function TOBSWorkspace(
     model::VecModel,
@@ -50,10 +50,10 @@ function TOBSWorkspace(
 )
     return TOBSWorkspace(model, copy(x0), options)
 end
-@params struct TOBSResult <: AbstractResult
-    minimizer::Any
-    minimum::Any
-    error::Any
+struct TOBSResult{TM1, TM2, TE} <: AbstractResult
+    minimizer::TM1
+    minimum::TM2
+    error::TE
 end
 
 function optimize!(workspace::TOBSWorkspace)
@@ -84,8 +84,8 @@ function optimize!(workspace::TOBSWorkspace)
     skip_step = false
     while (convParam < er || any(currentConstr .> 0)) && count < maxiter
         count > 1 && (m = JuMP.Model(milp_solver))
-        JuMP.set_optimizer_attribute(m, "logLevel", 0)
-        JuMP.set_optimizer_attribute(m, "seconds", timeLimit)
+        JuMP.set_optimizer_attribute(m, "log_to_console", false)
+        JuMP.set_optimizer_attribute(m, "time_limit", timeLimit)
         if !skip_step || count == 1
             if count > 1
                 currentConstr, jacConstr =
