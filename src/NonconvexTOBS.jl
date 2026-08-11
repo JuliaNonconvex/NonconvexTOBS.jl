@@ -74,7 +74,7 @@ function optimize!(workspace::TOBSWorkspace)
         throw(ArgumentError("Lower bound must be 0 and upper bound must be 1."))
     end
     er = 1.0
-    x = ones(numVars)
+    x = copy(x0)
     currentConstr, jacConstr = NonconvexCore.value_jacobian(model.ineq_constraints, x)
     objval, objgrad = NonconvexCore.value_gradient(getobjective(model), x)
     pastGrad = copy(objgrad)
