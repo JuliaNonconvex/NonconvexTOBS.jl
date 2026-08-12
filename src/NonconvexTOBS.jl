@@ -16,14 +16,16 @@ struct TOBSOptions
 end
 
 function TOBSOptions(;
-    movelimit::Real = 0.1, # move limit parameter
-    pastN::Int = 20, # number of past iterations for moving average calculation
-    convParam::Real = 0.001, # convergence parameter (upper bound of error)
-    constrRelax::Real = 0.1, # constraint relaxation parameter
-    timeLimit::Real = 1.0,
-    optimizer = HiGHS.Optimizer,
-    maxiter::Int = 200,
-    timeStable::Bool = true,
+    movelimit::Real=0.1, # move limit parameter
+    pastN::Int=20, # number of past iterations for moving average calculation
+    convParam::Real=0.001, # convergence parameter (upper bound of error)
+    constrRelax::Real=0.9, # constraint relaxation parameter
+    timeLimit::Real=1.0,
+    optimizer=HiGHS.Optimizer,
+    maxiter::Int=200,
+    timeStable::Bool=true,
+    relaxDecay::Real=0.9, # factor to shrink inflated movelimit/constrRelax toward defaults on success
+    maxInfeasible::Int=5, # consecutive infeasible subproblems before feasibility restoration
 )
     return TOBSOptions((;
         movelimit,
@@ -34,23 +36,25 @@ function TOBSOptions(;
         optimizer,
         maxiter,
         timeStable,
+        relaxDecay,
+        maxInfeasible,
     ))
 end
 
-mutable struct TOBSWorkspace{TM <: VecModel, TX <: AbstractVector, TO <: TOBSOptions} <: Workspace
+mutable struct TOBSWorkspace{TM<:VecModel,TX<:AbstractVector,TO<:TOBSOptions} <: Workspace
     model::TM
     x0::TX
     options::TO
 end
 function TOBSWorkspace(
     model::VecModel,
-    x0::AbstractVector = NonconvexCore.getinit(model);
-    options = TOBSOptions(),
+    x0::AbstractVector=NonconvexCore.getinit(model);
+    options=TOBSOptions(),
     kwargs...,
 )
     return TOBSWorkspace(model, copy(x0), options)
 end
-struct TOBSResult{TM1, TM2, TE} <: AbstractResult
+struct TOBSResult{TM1,TM2,TE} <: AbstractResult
     minimizer::TM1
     minimum::TM2
     error::TE
@@ -65,7 +69,9 @@ function optimize!(workspace::TOBSWorkspace)
     timeLimit,
     optimizer,
     maxiter,
-    timeStable = options.nt
+    timeStable,
+    relaxDecay,
+    maxInfeasible = options.nt
     milp_solver = JuMP.optimizer_with_attributes(optimizer)
     numVars = length(NonconvexCore.getinit(model))
     count = 1 # iteration counter
@@ -74,14 +80,16 @@ function optimize!(workspace::TOBSWorkspace)
         throw(ArgumentError("Lower bound must be 0 and upper bound must be 1."))
     end
     er = 1.0
-    x = ones(numVars)
+    x = copy(x0)
     currentConstr, jacConstr = NonconvexCore.value_jacobian(model.ineq_constraints, x)
     objval, objgrad = NonconvexCore.value_gradient(getobjective(model), x)
     pastGrad = copy(objgrad)
     best_sol = (x, objval, currentConstr, norm(currentConstr))
+    best_feasible = false
 
     m = JuMP.Model(milp_solver)
     skip_step = false
+    infeasible_count = 0
     while (convParam < er || any(currentConstr .> 0)) && count < maxiter
         count > 1 && (m = JuMP.Model(milp_solver))
         JuMP.set_optimizer_attribute(m, "log_to_console", false)
@@ -94,6 +102,9 @@ function optimize!(workspace::TOBSWorkspace)
             violation = norm(currentConstr)
             if (violation <= best_sol[4] - 1e-8 || violation < 1e-8 && objval < best_sol[2])
                 best_sol = (x, objval, currentConstr, violation)
+                if violation < 1e-8
+                    best_feasible = true
+                end
             end
         end
         skip_step = false
@@ -108,20 +119,54 @@ function optimize!(workspace::TOBSWorkspace)
         JuMP.@constraint(m, .-deltaX .<= absdeltaX)
         # Constrain amount of change per iteration
         JuMP.@constraint(m, sum(absdeltaX) <= movelimit * numVars)
-        # Constraint relaxation
+        # Constraint relaxation: when a constraint is satisfied (c < constrRelax)
+        # we relax the linearized constraint to -c so the subproblem is easier to
+        # solve. When violated (c >= constrRelax), we demand a fraction
+        # (1 - constrRelax) of the violation be removed this iteration.
         Δ = map(currentConstr) do c
-            abs(c) < constrRelax ? -c : -constrRelax * c
+            c < constrRelax ? -c : (constrRelax - 1) * c
         end
         JuMP.@constraint(m, jacConstr * deltaX .<= Δ)
-        # Define optimization objective
-        JuMP.@objective(m, Min, objgrad' * deltaX)
+        # Objective: normally minimize the linearized objective. After too many
+        # infeasible subproblems, switch to a feasibility-restoration phase that
+        # minimizes the L1 norm of the *positive* (violated) part of the
+        # linearized constraint residual. This finds the flips that push the
+        # violated constraints down the most, ignoring the original objective.
+        restore = infeasible_count >= maxInfeasible
+        if restore
+            # Artificial slack for each constraint (>= positive violation).
+            JuMP.@variable(m, violSlack[1:length(currentConstr)] >= 0)
+            # linearized constraint value + slack >= 0  =>  slack >= -(c + jac*dx)
+            # i.e. slack captures any remaining (positive) violation after the step.
+            JuMP.@constraint(m, violSlack .>= -(currentConstr + jacConstr * deltaX))
+            JuMP.@objective(m, Min, sum(violSlack))
+        else
+            JuMP.@objective(m, Min, objgrad' * deltaX)
+        end
         # Optimize linearized problem
         JuMP.optimize!(m)
         # Check if infeasible
         if JuMP.termination_status(m) == JuMP.INFEASIBLE
-            skip_step = true
+            # Subproblem infeasible, but a primal solution may still exist
+            # (e.g. from a time-limited solve). Evaluate the *real* constraint
+            # at the candidate point and accept the step only if it improves
+            # the actual (nonlinear) feasibility, not just the linearization.
+            primal = JuMP.primal_status(m)
+            if primal == JuMP.FEASIBLE_POINT || primal == JuMP.NEARLY_FEASIBLE_POINT
+                x_trial = x + JuMP.value.(deltaX)
+                trialConstr = model.ineq_constraints(x_trial)
+                trial_vio = norm(trialConstr)
+                if trial_vio < norm(currentConstr) - 1e-10
+                    @info "Subproblem infeasible but step improves real feasibility (vio $(round(norm(currentConstr), digits=3)) → $(round(trial_vio, digits=3))). Accepting."
+                else
+                    skip_step = true
+                end
+            else
+                skip_step = true
+            end
         end
-        # Sometimes value errors even if feasible??
+        # Apply the step if not skipped. Re-fetch deltaX.value to handle both
+        # the normal-feasible case and the infeasible-but-accepted case.
         try
             if !skip_step
                 x += JuMP.value.(deltaX)
@@ -130,27 +175,50 @@ function optimize!(workspace::TOBSWorkspace)
             skip_step = true
         end
         if skip_step
-            @warn "Subproblem is infeasible. Temporarily relaxing the subproblem."
-            movelimit *= 1.1
-            constrRelax *= 1.1
+            infeasible_count += 1
+            if infeasible_count == maxInfeasible
+                @warn "Subproblem infeasible $infeasible_count times. Switching to feasibility restoration."
+            elseif infeasible_count > maxInfeasible
+                # Even restoration failed: keep bumping move limit to give the
+                # restoration phase more freedom on the next attempt.
+                @warn "Restoration subproblem still infeasible."
+                movelimit *= 1.1
+                constrRelax = min(constrRelax * 1.1, 0.999)
+            else
+                @warn "Subproblem is infeasible. Temporarily relaxing the subproblem."
+                movelimit *= 1.1
+                constrRelax = min(constrRelax * 1.1, 0.999)
+            end
         else
-            movelimit = options.nt.movelimit
-            constrRelax = options.nt.constrRelax
+            if restore
+                @info "Restoration step succeeded; resuming normal iterations."
+            end
+            infeasible_count = 0
+            # Decay inflated parameters back toward their defaults on success.
+            movelimit = options.nt.movelimit + relaxDecay * (movelimit - options.nt.movelimit)
+            constrRelax =
+                options.nt.constrRelax + relaxDecay * (constrRelax - options.nt.constrRelax)
             # Store recent history of objectives
-            objHist[1:end-1] .= objHist[2:end]
+            objHist[1:(end-1)] .= objHist[2:end]
             objval, objgrad = NonconvexCore.value_gradient(getobjective(model), x)
-            # Apply "time stabilization"
+            # Apply "time stabilization": average the current gradient with the
+            # previous iteration's gradient to reduce oscillation.
             if timeStable
-                objgrad = (objgrad + pastGrad) / 2
-                pastGrad = copy(objgrad)
+                newGrad = (objgrad + pastGrad) / 2
+                pastGrad = copy(objgrad)  # save the ORIGINAL gradient, not the averaged one
+                objgrad = newGrad
             end
             objHist[end] = objval
             if count > pastN
-                er = abs(sum([objHist[i] - objHist[i-1] for i = 2:pastN])) / sum(objHist)
+                # Use sum of ABSOLUTE differences so oscillations don't cancel out
+                er = sum([abs(objHist[i] - objHist[i-1]) for i = 2:pastN]) / sum(objHist)
             end
             @info "iter = $count, obj = $(round.(objHist[end]; digits=3)), constr_vio_norm = $(round(norm(currentConstr), digits=3)), er = $(round(er, digits=3))"
         end
         count += 1
+    end
+    if !best_feasible
+        @warn "No feasible solution was found during the optimization. Returning the best design found."
     end
     return TOBSResult(best_sol[1], best_sol[2], er)
 end
