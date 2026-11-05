@@ -26,7 +26,7 @@ end
     problem = PointLoadCantilever(Val{:Linear}, problem_size, (1.0, 1.0), E, v, f)
 
     # define FEA solver and auxiliary functions
-    solver = FEASolver(Direct, problem; xmin = xmin)
+    solver = FEASolver(DirectSolver, problem; xmin = xmin)
     cheqfilter = DensityFilter(solver; rmin = rmin) # filter function
     comp = TopOpt.Compliance(solver) # compliance function
 
