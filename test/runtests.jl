@@ -29,12 +29,12 @@ using NonconvexTOBS, TopOpt, Test, NonconvexUtils
     tobj = TraceFunction(obj, on_grad = true)
     m = Model(tobj) # create optimization model
     addvar!(m, zeros(length(x0)), ones(length(x0))) # setup optimization variables
-    Nonconvex.add_ineq_constraint!(m, constr) # setup volume inequality constraint
+    NonconvexTOBS.add_ineq_constraint!(m, constr) # setup volume inequality constraint
     options = TOBSOptions() # optimization options with default values
     TopOpt.setpenalty!(solver, p)
 
     # Perform TOBS optimization
-    @time r = Nonconvex.optimize(m, TOBSAlg(), x0; options = options)
+    @time r = NonconvexTOBS.optimize(m, TOBSAlg(), x0; options = options)
 
     # Results
     @show obj(r.minimizer)
