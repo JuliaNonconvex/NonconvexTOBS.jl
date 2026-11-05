@@ -1,5 +1,13 @@
 using NonconvexTOBS, TopOpt, Test, NonconvexUtils
 
+@testset "Equality constraints are rejected" begin
+    # Regression test: equality constraints used to be silently ignored.
+    m = Model(x -> sum(x .^ 2))
+    addvar!(m, zeros(2), ones(2))
+    add_eq_constraint!(m, x -> x[1] + x[2] - 1)
+    @test_throws ArgumentError NonconvexTOBS.optimize(m, TOBSAlg(), ones(2))
+end
+
 @testset "Example" begin
 
     # Recreating cantilever problem from original paper
@@ -18,7 +26,7 @@ using NonconvexTOBS, TopOpt, Test, NonconvexUtils
     problem = PointLoadCantilever(Val{:Linear}, problem_size, (1.0, 1.0), E, v, f)
 
     # define FEA solver and auxiliary functions
-    solver = FEASolver(Direct, problem; xmin = xmin)
+    solver = FEASolver(DirectSolver, problem; xmin = xmin)
     cheqfilter = DensityFilter(solver; rmin = rmin) # filter function
     comp = TopOpt.Compliance(solver) # compliance function
 
@@ -29,12 +37,12 @@ using NonconvexTOBS, TopOpt, Test, NonconvexUtils
     tobj = TraceFunction(obj, on_grad = true)
     m = Model(tobj) # create optimization model
     addvar!(m, zeros(length(x0)), ones(length(x0))) # setup optimization variables
-    Nonconvex.add_ineq_constraint!(m, constr) # setup volume inequality constraint
+    NonconvexTOBS.add_ineq_constraint!(m, constr) # setup volume inequality constraint
     options = TOBSOptions() # optimization options with default values
     TopOpt.setpenalty!(solver, p)
 
     # Perform TOBS optimization
-    @time r = Nonconvex.optimize(m, TOBSAlg(), x0; options = options)
+    @time r = NonconvexTOBS.optimize(m, TOBSAlg(), x0; options = options)
 
     # Results
     @show obj(r.minimizer)

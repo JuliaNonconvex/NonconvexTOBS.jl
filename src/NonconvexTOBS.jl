@@ -74,10 +74,17 @@ function optimize!(workspace::TOBSWorkspace)
     maxInfeasible = options.nt
     milp_solver = JuMP.optimizer_with_attributes(optimizer)
     numVars = length(NonconvexCore.getinit(model))
-    count = 1 # iteration counter
+    count = 0 # iteration counter
     objHist = zeros(pastN) # recent history of compliance values
     if any(NonconvexCore.getmin(model) .!= 0) || any(NonconvexCore.getmax(model) .!= 1)
         throw(ArgumentError("Lower bound must be 0 and upper bound must be 1."))
+    end
+    if length(model.eq_constraints.fs) != 0
+        throw(
+            ArgumentError(
+                "TOBS does not support equality constraints, only inequality constraints.",
+            ),
+        )
     end
     er = 1.0
     x = copy(x0)
@@ -85,17 +92,17 @@ function optimize!(workspace::TOBSWorkspace)
     objval, objgrad = NonconvexCore.value_gradient(getobjective(model), x)
     pastGrad = copy(objgrad)
     best_sol = (x, objval, currentConstr, norm(currentConstr))
-    best_feasible = false
+    best_feasible = norm(currentConstr) < 1e-8
 
     m = JuMP.Model(milp_solver)
     skip_step = false
     infeasible_count = 0
     while (convParam < er || any(currentConstr .> 0)) && count < maxiter
-        count > 1 && (m = JuMP.Model(milp_solver))
+        count > 0 && (m = JuMP.Model(milp_solver))
         JuMP.set_optimizer_attribute(m, "log_to_console", false)
         JuMP.set_optimizer_attribute(m, "time_limit", timeLimit)
-        if !skip_step || count == 1
-            if count > 1
+        if !skip_step || count == 0
+            if count > 0
                 currentConstr, jacConstr =
                     NonconvexCore.value_jacobian(model.ineq_constraints, x)
             end
@@ -119,12 +126,12 @@ function optimize!(workspace::TOBSWorkspace)
         JuMP.@constraint(m, .-deltaX .<= absdeltaX)
         # Constrain amount of change per iteration
         JuMP.@constraint(m, sum(absdeltaX) <= movelimit * numVars)
-        # Constraint relaxation: when a constraint is satisfied (c < constrRelax)
-        # we relax the linearized constraint to -c so the subproblem is easier to
-        # solve. When violated (c >= constrRelax), we demand a fraction
-        # (1 - constrRelax) of the violation be removed this iteration.
+        # Constraint relaxation: a satisfied constraint (c <= 0) is relaxed so
+        # the linearized constraint may increase by up to -c this iteration.
+        # A violated constraint (c > 0) must remove a fraction (1 - constrRelax)
+        # of its violation this iteration.
         Δ = map(currentConstr) do c
-            c < constrRelax ? -c : (constrRelax - 1) * c
+            c < 0 ? -c : (constrRelax - 1) * c
         end
         JuMP.@constraint(m, jacConstr * deltaX .<= Δ)
         # Objective: normally minimize the linearized objective. After too many
@@ -211,7 +218,9 @@ function optimize!(workspace::TOBSWorkspace)
             objHist[end] = objval
             if count > pastN
                 # Use sum of ABSOLUTE differences so oscillations don't cancel out
-                er = sum([abs(objHist[i] - objHist[i-1]) for i = 2:pastN]) / sum(objHist)
+                s = sum(objHist)
+                er = iszero(s) ? 0.0 :
+                     sum([abs(objHist[i] - objHist[i-1]) for i = 2:pastN]) / s
             end
             @info "iter = $count, obj = $(round.(objHist[end]; digits=3)), constr_vio_norm = $(round(norm(currentConstr), digits=3)), er = $(round(er, digits=3))"
         end
