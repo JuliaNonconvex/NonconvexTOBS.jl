@@ -1,5 +1,13 @@
 using NonconvexTOBS, TopOpt, Test, NonconvexUtils
 
+@testset "Equality constraints are rejected" begin
+    # Regression test: equality constraints used to be silently ignored.
+    m = Model(x -> sum(x .^ 2))
+    addvar!(m, zeros(2), ones(2))
+    add_eq_constraint!(m, x -> x[1] + x[2] - 1)
+    @test_throws ArgumentError NonconvexTOBS.optimize(m, TOBSAlg(), ones(2))
+end
+
 @testset "Example" begin
 
     # Recreating cantilever problem from original paper
