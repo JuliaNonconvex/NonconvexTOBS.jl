@@ -11,6 +11,17 @@ import JuMP
 
 struct TOBSAlg <: AbstractOptimizer end
 
+# TOBS linearizes the problem around the current iterate and handles
+# inequality constraints with a feasibility-restoration phase; it works on
+# continuous design variables with [0, 1] bounds.
+NonconvexCore.solver_capabilities(::TOBSAlg) = ConstraintCapabilities(
+    eq = false,
+    ineq = true,
+    sd = false,
+    box = true,
+    integer = false,
+)
+
 struct TOBSOptions
     nt::NamedTuple # one of the fields of the nt is milp_options
 end
