@@ -20,6 +20,7 @@ NonconvexCore.solver_capabilities(::TOBSAlg) = ConstraintCapabilities(
     sd = false,
     box = true,
     integer = false,
+    infinite_bounds = false,
 )
 
 struct TOBSOptions
