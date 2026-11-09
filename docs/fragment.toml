@@ -7,5 +7,9 @@ title = "TOBS"
 file = "index.md"
 
 [[pages]]
+title = "Theory"
+file = "theory.md"
+
+[[pages]]
 title = "Docstrings"
 file = "docstrings.md"
