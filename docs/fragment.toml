@@ -1,0 +1,11 @@
+name = "TOBS"
+modules = ["NonconvexTOBS"]
+doctest_setup = "using NonconvexTOBS"
+
+[[pages]]
+title = "TOBS"
+file = "index.md"
+
+[[pages]]
+title = "Docstrings"
+file = "docstrings.md"
