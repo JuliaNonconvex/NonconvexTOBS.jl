@@ -1,4 +1,4 @@
-using NonconvexTOBS, TopOpt, Test, NonconvexUtils
+using NonconvexTOBS, TopOpt, Test
 
 @testset "Equality constraints are rejected" begin
     # Regression test: equality constraints used to be silently ignored.
