@@ -9,6 +9,17 @@ using NonconvexCore: AbstractOptimizer, CountingFunction
 import NonconvexCore: optimize!, Workspace
 using JuMP: JuMP
 
+"""
+    TOBSAlg()
+
+Topology optimization of binary structures (TOBS), a sequential-linearization
+heuristic for **binary** nonlinear programs. Each iteration linearizes the
+objective and the inequality constraints around the current design and solves
+the resulting binary linear program (a MILP, via [`TOBSOptions`](@ref)'
+`optimizer`) under a move limit; infeasible subproblems trigger a
+feasibility-restoration phase. All variables must have bounds `0` and `1`.
+Equality constraints are not supported.
+"""
 struct TOBSAlg <: AbstractOptimizer end
 
 # TOBS linearizes the problem around the current iterate and handles
@@ -30,6 +41,32 @@ function NonconvexCore.solver_capabilities(::TOBSAlg)
     )
 end
 
+"""
+    TOBSOptions(; kwargs...)
+
+Options of the [`TOBSAlg`](@ref) heuristic:
+
+- `movelimit`: maximum move limit per iteration as a fraction of the number
+  of variables (at most `movelimit * n` variables may flip). Default `0.1`.
+- `pastN`: number of past iterations used for the moving average of the
+  objective history. Default `20`.
+- `convParam`: convergence tolerance on the moving average of the relative
+  objective change over the last `pastN` iterations. Default `0.001`.
+- `constrRelax`: constraint relaxation applied to the linearized constraints
+  (a violated constraint must remove a fraction `1 - constrRelax` of its
+  violation each iteration). Default `0.9`.
+- `timeLimit`: time limit (seconds) of each MILP solve. Default `1.0`.
+- `optimizer`: the JuMP optimizer type used for the MILP subproblems.
+  Default `HiGHS.Optimizer`.
+- `maxiter`: maximum number of outer iterations. Default `200`.
+- `timeStable`: average the objective gradient with the previous iteration's
+  gradient (time-stability filter) when `true`. Default `true`.
+- `relaxDecay`: geometric factor shrinking an inflated `movelimit`/
+  `constrRelax` back toward their defaults after successful steps.
+  Default `0.9`.
+- `maxInfeasible`: consecutive infeasible subproblems before switching to
+  the feasibility-restoration phase. Default `5`.
+"""
 struct TOBSOptions
     nt::NamedTuple # one of the fields of the nt is milp_options
 end
