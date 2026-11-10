@@ -6,11 +6,67 @@ using Reexport, Parameters, SparseArrays, HiGHS
 @reexport using NonconvexCore
 using NonconvexCore: VecModel, AbstractResult
 using NonconvexCore: AbstractOptimizer, CountingFunction
-import NonconvexCore: optimize!
-import JuMP
+import NonconvexCore: optimize!, Workspace
+using JuMP: JuMP
 
+"""
+    TOBSAlg()
+
+Topology optimization of binary structures (TOBS), a sequential-linearization
+heuristic for **binary** nonlinear programs. Each iteration linearizes the
+objective and the inequality constraints around the current design and solves
+the resulting binary linear program (a MILP, via [`TOBSOptions`](@ref)'
+`optimizer`) under a move limit; infeasible subproblems trigger a
+feasibility-restoration phase. All variables must have bounds `0` and `1`.
+Equality constraints are not supported.
+"""
 struct TOBSAlg <: AbstractOptimizer end
 
+# TOBS linearizes the problem around the current iterate and handles
+# inequality constraints with a feasibility-restoration phase; it works on
+# continuous design variables with [0, 1] bounds.
+function NonconvexCore.solver_capabilities(::TOBSAlg)
+    return ConstraintCapabilities(;
+        linear_eq=false,
+        nonlinear_eq=false,
+        linear_ineq=true,
+        nonlinear_ineq=true,
+        linear_sd=false,
+        nonlinear_sd=false,
+        box=true,
+        continuous=true,
+        binary=true,
+        integer=false,
+        infinite_bounds=false,
+    )
+end
+
+"""
+    TOBSOptions(; kwargs...)
+
+Options of the [`TOBSAlg`](@ref) heuristic:
+
+- `movelimit`: maximum move limit per iteration as a fraction of the number
+  of variables (at most `movelimit * n` variables may flip). Default `0.1`.
+- `pastN`: number of past iterations used for the moving average of the
+  objective history. Default `20`.
+- `convParam`: convergence tolerance on the moving average of the relative
+  objective change over the last `pastN` iterations. Default `0.001`.
+- `constrRelax`: constraint relaxation applied to the linearized constraints
+  (a violated constraint must remove a fraction `1 - constrRelax` of its
+  violation each iteration). Default `0.9`.
+- `timeLimit`: time limit (seconds) of each MILP solve. Default `1.0`.
+- `optimizer`: the JuMP optimizer type used for the MILP subproblems.
+  Default `HiGHS.Optimizer`.
+- `maxiter`: maximum number of outer iterations. Default `200`.
+- `timeStable`: average the objective gradient with the previous iteration's
+  gradient (time-stability filter) when `true`. Default `true`.
+- `relaxDecay`: geometric factor shrinking an inflated `movelimit`/
+  `constrRelax` back toward their defaults after successful steps.
+  Default `0.9`.
+- `maxInfeasible`: consecutive infeasible subproblems before switching to
+  the feasibility-restoration phase. Default `5`.
+"""
 struct TOBSOptions
     nt::NamedTuple # one of the fields of the nt is milp_options
 end
@@ -82,14 +138,16 @@ function optimize!(workspace::TOBSWorkspace)
     if length(model.eq_constraints.fs) != 0
         throw(
             ArgumentError(
-                "TOBS does not support equality constraints, only inequality constraints.",
+                "TOBS does not support equality constraints, only inequality constraints."
             ),
         )
     end
     er = 1.0
     x = copy(x0)
     currentConstr, jacConstr = NonconvexCore.value_jacobian(model.ineq_constraints, x)
-    objval, objgrad = NonconvexCore.value_gradient(getobjective(model), x)
+    obj = getobjective(model)
+    obj === nothing && throw(ArgumentError("The model has no objective."))
+    objval, objgrad = NonconvexCore.value_gradient(obj, x)
     pastGrad = copy(objgrad)
     best_sol = (x, objval, currentConstr, norm(currentConstr))
     best_feasible = norm(currentConstr) < 1e-8
@@ -103,8 +161,9 @@ function optimize!(workspace::TOBSWorkspace)
         JuMP.set_optimizer_attribute(m, "time_limit", timeLimit)
         if !skip_step || count == 0
             if count > 0
-                currentConstr, jacConstr =
-                    NonconvexCore.value_jacobian(model.ineq_constraints, x)
+                currentConstr, jacConstr = NonconvexCore.value_jacobian(
+                    model.ineq_constraints, x
+                )
             end
             violation = norm(currentConstr)
             if (violation <= best_sol[4] - 1e-8 || violation < 1e-8 && objval < best_sol[2])
@@ -131,7 +190,7 @@ function optimize!(workspace::TOBSWorkspace)
         # A violated constraint (c > 0) must remove a fraction (1 - constrRelax)
         # of its violation this iteration.
         Δ = map(currentConstr) do c
-            c < 0 ? -c : (constrRelax - 1) * c
+            return c < 0 ? -c : (constrRelax - 1) * c
         end
         JuMP.@constraint(m, jacConstr * deltaX .<= Δ)
         # Objective: normally minimize the linearized objective. After too many
@@ -202,12 +261,15 @@ function optimize!(workspace::TOBSWorkspace)
             end
             infeasible_count = 0
             # Decay inflated parameters back toward their defaults on success.
-            movelimit = options.nt.movelimit + relaxDecay * (movelimit - options.nt.movelimit)
+            movelimit =
+                options.nt.movelimit + relaxDecay * (movelimit - options.nt.movelimit)
             constrRelax =
                 options.nt.constrRelax + relaxDecay * (constrRelax - options.nt.constrRelax)
             # Store recent history of objectives
-            objHist[1:(end-1)] .= objHist[2:end]
-            objval, objgrad = NonconvexCore.value_gradient(getobjective(model), x)
+            objHist[1:(end - 1)] .= objHist[2:end]
+            obj = getobjective(model)
+            obj === nothing && throw(ArgumentError("The model has no objective."))
+            objval, objgrad = NonconvexCore.value_gradient(obj, x)
             # Apply "time stabilization": average the current gradient with the
             # previous iteration's gradient to reduce oscillation.
             if timeStable
@@ -219,8 +281,11 @@ function optimize!(workspace::TOBSWorkspace)
             if count > pastN
                 # Use sum of ABSOLUTE differences so oscillations don't cancel out
                 s = sum(objHist)
-                er = iszero(s) ? 0.0 :
-                     sum([abs(objHist[i] - objHist[i-1]) for i = 2:pastN]) / s
+                er = if iszero(s)
+                    0.0
+                else
+                    sum([abs(objHist[i] - objHist[i - 1]) for i in 2:pastN]) / s
+                end
             end
             @info "iter = $count, obj = $(round.(objHist[end]; digits=3)), constr_vio_norm = $(round(norm(currentConstr), digits=3)), er = $(round(er, digits=3))"
         end
