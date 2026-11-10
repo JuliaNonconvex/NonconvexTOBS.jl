@@ -7,21 +7,28 @@ using Reexport, Parameters, SparseArrays, HiGHS
 using NonconvexCore: VecModel, AbstractResult
 using NonconvexCore: AbstractOptimizer, CountingFunction
 import NonconvexCore: optimize!
-import JuMP
+using JuMP: JuMP
 
 struct TOBSAlg <: AbstractOptimizer end
 
 # TOBS linearizes the problem around the current iterate and handles
 # inequality constraints with a feasibility-restoration phase; it works on
 # continuous design variables with [0, 1] bounds.
-NonconvexCore.solver_capabilities(::TOBSAlg) = ConstraintCapabilities(
-    eq = false,
-    ineq = true,
-    sd = false,
-    box = true,
-    integer = false,
-    infinite_bounds = false,
-)
+function NonconvexCore.solver_capabilities(::TOBSAlg)
+    return ConstraintCapabilities(;
+        linear_eq=false,
+        nonlinear_eq=false,
+        linear_ineq=true,
+        nonlinear_ineq=true,
+        linear_sd=false,
+        nonlinear_sd=false,
+        box=true,
+        continuous=true,
+        binary=true,
+        integer=false,
+        infinite_bounds=false,
+    )
+end
 
 struct TOBSOptions
     nt::NamedTuple # one of the fields of the nt is milp_options
@@ -94,7 +101,7 @@ function optimize!(workspace::TOBSWorkspace)
     if length(model.eq_constraints.fs) != 0
         throw(
             ArgumentError(
-                "TOBS does not support equality constraints, only inequality constraints.",
+                "TOBS does not support equality constraints, only inequality constraints."
             ),
         )
     end
@@ -115,8 +122,9 @@ function optimize!(workspace::TOBSWorkspace)
         JuMP.set_optimizer_attribute(m, "time_limit", timeLimit)
         if !skip_step || count == 0
             if count > 0
-                currentConstr, jacConstr =
-                    NonconvexCore.value_jacobian(model.ineq_constraints, x)
+                currentConstr, jacConstr = NonconvexCore.value_jacobian(
+                    model.ineq_constraints, x
+                )
             end
             violation = norm(currentConstr)
             if (violation <= best_sol[4] - 1e-8 || violation < 1e-8 && objval < best_sol[2])
@@ -143,7 +151,7 @@ function optimize!(workspace::TOBSWorkspace)
         # A violated constraint (c > 0) must remove a fraction (1 - constrRelax)
         # of its violation this iteration.
         Δ = map(currentConstr) do c
-            c < 0 ? -c : (constrRelax - 1) * c
+            return c < 0 ? -c : (constrRelax - 1) * c
         end
         JuMP.@constraint(m, jacConstr * deltaX .<= Δ)
         # Objective: normally minimize the linearized objective. After too many
@@ -214,11 +222,12 @@ function optimize!(workspace::TOBSWorkspace)
             end
             infeasible_count = 0
             # Decay inflated parameters back toward their defaults on success.
-            movelimit = options.nt.movelimit + relaxDecay * (movelimit - options.nt.movelimit)
+            movelimit =
+                options.nt.movelimit + relaxDecay * (movelimit - options.nt.movelimit)
             constrRelax =
                 options.nt.constrRelax + relaxDecay * (constrRelax - options.nt.constrRelax)
             # Store recent history of objectives
-            objHist[1:(end-1)] .= objHist[2:end]
+            objHist[1:(end - 1)] .= objHist[2:end]
             objval, objgrad = NonconvexCore.value_gradient(getobjective(model), x)
             # Apply "time stabilization": average the current gradient with the
             # previous iteration's gradient to reduce oscillation.
@@ -231,8 +240,11 @@ function optimize!(workspace::TOBSWorkspace)
             if count > pastN
                 # Use sum of ABSOLUTE differences so oscillations don't cancel out
                 s = sum(objHist)
-                er = iszero(s) ? 0.0 :
-                     sum([abs(objHist[i] - objHist[i-1]) for i = 2:pastN]) / s
+                er = if iszero(s)
+                    0.0
+                else
+                    sum([abs(objHist[i] - objHist[i - 1]) for i in 2:pastN]) / s
+                end
             end
             @info "iter = $count, obj = $(round.(objHist[end]; digits=3)), constr_vio_norm = $(round(norm(currentConstr), digits=3)), er = $(round(er, digits=3))"
         end

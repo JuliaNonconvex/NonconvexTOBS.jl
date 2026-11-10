@@ -26,15 +26,15 @@ end
     problem = PointLoadCantilever(Val{:Linear}, problem_size, (1.0, 1.0), E, v, f)
 
     # define FEA solver and auxiliary functions
-    solver = FEASolver(DirectSolver, problem; xmin = xmin)
-    cheqfilter = DensityFilter(solver; rmin = rmin) # filter function
+    solver = FEASolver(DirectSolver, problem; xmin=xmin)
+    cheqfilter = DensityFilter(solver; rmin=rmin) # filter function
     comp = TopOpt.Compliance(solver) # compliance function
 
     obj(x) = comp(cheqfilter(PseudoDensities(x))) # compliance objective
     constr(x) = sum(cheqfilter(PseudoDensities(x))) / length(x) - V # volume fraction constraint
 
     # Optimization setup
-    tobj = TraceFunction(obj, on_grad = true)
+    tobj = TraceFunction(obj, on_grad=true)
     m = Model(tobj) # create optimization model
     addvar!(m, zeros(length(x0)), ones(length(x0))) # setup optimization variables
     NonconvexTOBS.add_ineq_constraint!(m, constr) # setup volume inequality constraint
@@ -42,11 +42,12 @@ end
     TopOpt.setpenalty!(solver, p)
 
     # Perform TOBS optimization
-    @time r = NonconvexTOBS.optimize(m, TOBSAlg(), x0; options = options)
+    @time r = NonconvexTOBS.optimize(m, TOBSAlg(), x0; options=options)
 
     # Results
     @show obj(r.minimizer)
     @show constr(r.minimizer)
     topology = r.minimizer
-
 end
+
+include("aqua.jl")
