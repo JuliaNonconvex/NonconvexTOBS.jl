@@ -1,6 +1,6 @@
 name = "NonconvexTOBS"
 uuid = "6c0b5230-d4c9-466e-bfd4-b31e6272ab65"
-version = "0.2.3"
+version = "0.3.0"
 authors = ["Mohamed Tarek <mohdibntarek@gmail.com> and contributors"]
 
 [deps]
