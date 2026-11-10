@@ -6,7 +6,7 @@ using Reexport, Parameters, SparseArrays, HiGHS
 @reexport using NonconvexCore
 using NonconvexCore: VecModel, AbstractResult
 using NonconvexCore: AbstractOptimizer, CountingFunction
-import NonconvexCore: optimize!
+import NonconvexCore: optimize!, Workspace
 using JuMP: JuMP
 
 struct TOBSAlg <: AbstractOptimizer end
@@ -108,7 +108,9 @@ function optimize!(workspace::TOBSWorkspace)
     er = 1.0
     x = copy(x0)
     currentConstr, jacConstr = NonconvexCore.value_jacobian(model.ineq_constraints, x)
-    objval, objgrad = NonconvexCore.value_gradient(getobjective(model), x)
+    obj = getobjective(model)
+    obj === nothing && throw(ArgumentError("The model has no objective."))
+    objval, objgrad = NonconvexCore.value_gradient(obj, x)
     pastGrad = copy(objgrad)
     best_sol = (x, objval, currentConstr, norm(currentConstr))
     best_feasible = norm(currentConstr) < 1e-8
@@ -228,7 +230,9 @@ function optimize!(workspace::TOBSWorkspace)
                 options.nt.constrRelax + relaxDecay * (constrRelax - options.nt.constrRelax)
             # Store recent history of objectives
             objHist[1:(end - 1)] .= objHist[2:end]
-            objval, objgrad = NonconvexCore.value_gradient(getobjective(model), x)
+            obj = getobjective(model)
+            obj === nothing && throw(ArgumentError("The model has no objective."))
+            objval, objgrad = NonconvexCore.value_gradient(obj, x)
             # Apply "time stabilization": average the current gradient with the
             # previous iteration's gradient to reduce oscillation.
             if timeStable
