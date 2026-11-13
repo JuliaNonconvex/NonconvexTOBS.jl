@@ -107,9 +107,7 @@ end
             m,
             TOBSAlg(),
             [0.0, 0.0],
-            options=TOBSOptions(
-                pastN=pastN, movelimit=0.5, timeLimit=5.0, maxiter=5
-            ),
+            options=TOBSOptions(pastN=pastN, movelimit=0.5, timeLimit=5.0, maxiter=5),
         )
         @test r.minimum ≈ -1.0 atol = 1e-8
         @test sum(r.minimizer) ≈ 1.0 atol = 1e-8
@@ -189,6 +187,8 @@ end
     )
     # a purely binary model and starting point is accepted
     setinteger!(m, 1:2, [true, true])
-    r = optimize(m, TOBSAlg(), [0.0, 0.0], options=TOBSOptions(movelimit=0.5, timeLimit=5.0))
+    r = optimize(
+        m, TOBSAlg(), [0.0, 0.0], options=TOBSOptions(movelimit=0.5, timeLimit=5.0)
+    )
     @test r.minimum ≈ -1.0 atol = 1e-8
 end
