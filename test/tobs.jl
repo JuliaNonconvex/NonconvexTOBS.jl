@@ -4,6 +4,7 @@
     # Regression test: equality constraints used to be silently ignored.
     m = Model(x -> sum(x .^ 2))
     addvar!(m, zeros(2), ones(2))
+    setinteger!(m, 1:2, [true, true])
     add_eq_constraint!(m, x -> x[1] + x[2] - 1)
     @test_throws ArgumentError NonconvexTOBS.optimize(m, TOBSAlg(), ones(2))
 end
@@ -38,6 +39,7 @@ end
     tobj = TraceFunction(obj, on_grad=true)
     m = Model(tobj) # create optimization model
     addvar!(m, zeros(length(x0)), ones(length(x0))) # setup optimization variables
+    setinteger!(m, 1:length(x0), trues(length(x0))) # binary design variables
     NonconvexTOBS.add_ineq_constraint!(m, constr) # setup volume inequality constraint
     options = TOBSOptions() # optimization options with default values
     TopOpt.setpenalty!(solver, p)

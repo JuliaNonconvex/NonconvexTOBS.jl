@@ -24,7 +24,7 @@ struct TOBSAlg <: AbstractOptimizer end
 
 # TOBS linearizes the problem around the current iterate and handles
 # inequality constraints with a feasibility-restoration phase; it works on
-# continuous design variables with [0, 1] bounds.
+# binary design variables with [0, 1] bounds.
 function NonconvexCore.solver_capabilities(::TOBSAlg)
     return ConstraintCapabilities(;
         linear_eq=false,
@@ -34,7 +34,11 @@ function NonconvexCore.solver_capabilities(::TOBSAlg)
         linear_sd=false,
         nonlinear_sd=false,
         box=true,
-        continuous=true,
+        # The design steps `deltaX` are `JuMP.Int`: a continuous variable at
+        # x = 0.5 only permits integer moves in [-0.5, 0.5], i.e. {0}, so
+        # continuous variables would be silently frozen. Declare no
+        # continuous support so the capability check rejects them upfront.
+        continuous=false,
         binary=true,
         integer=false,
         infinite_bounds=false,
@@ -131,6 +135,10 @@ function optimize!(workspace::TOBSWorkspace)
     milp_solver = JuMP.optimizer_with_attributes(optimizer)
     numVars = length(NonconvexCore.getinit(model))
     count = 0 # iteration counter
+    # Guard against degenerate history windows: pastN <= 0 would give a
+    # BoundsError on the first accepted step, and pastN >= maxiter would keep
+    # `er` stuck at 1.0 so convergence is never detected.
+    pastN = max(1, min(pastN, maxiter))
     objHist = zeros(pastN) # recent history of compliance values
     if any(NonconvexCore.getmin(model) .!= 0) || any(NonconvexCore.getmax(model) .!= 1)
         throw(ArgumentError("Lower bound must be 0 and upper bound must be 1."))
@@ -232,13 +240,19 @@ function optimize!(workspace::TOBSWorkspace)
             end
         end
         # Apply the step if not skipped. Re-fetch deltaX.value to handle both
-        # the normal-feasible case and the infeasible-but-accepted case.
-        try
-            if !skip_step
+        # the normal-feasible case and the infeasible-but-accepted case. Only
+        # apply the step when the MILP solve succeeded or still produced a
+        # usable primal solution (e.g. a time-limited solve with an
+        # incumbent); a failed or unknown solve is treated as a skipped step.
+        # Genuine exceptions (e.g. from a bug in the model) are allowed to
+        # propagate instead of being silently swallowed.
+        if !skip_step
+            status = JuMP.termination_status(m)
+            if status == JuMP.OPTIMAL || JuMP.has_values(m)
                 x += JuMP.value.(deltaX)
+            else
+                skip_step = true
             end
-        catch
-            skip_step = true
         end
         if skip_step
             infeasible_count += 1
@@ -278,14 +292,22 @@ function optimize!(workspace::TOBSWorkspace)
                 objgrad = newGrad
             end
             objHist[end] = objval
-            if count > pastN
-                # Use sum of ABSOLUTE differences so oscillations don't cancel out
-                s = sum(objHist)
-                er = if iszero(s)
-                    0.0
-                else
-                    sum([abs(objHist[i] - objHist[i - 1]) for i in 2:pastN]) / s
+            # Rolling mean of the per-step relative objective change over the
+            # last `pastN` accepted steps (fewer early on, growing as data
+            # arrives). Absolute differences are used so oscillations don't
+            # cancel out, and each change is normalized by the magnitude of
+            # the objective it started from, so the criterion is a proper
+            # relative error instead of a running sum of objectives. A step
+            # starting from an objective of 0 counts as a 100% change unless
+            # the objective stayed at 0.
+            window = min(count + 1, pastN)
+            if window >= 2
+                h = objHist[(end - window + 1):end]
+                rel = map(1:(window - 1)) do i
+                    dh = abs(h[i + 1] - h[i])
+                    return iszero(h[i]) ? (iszero(dh) ? 0.0 : 1.0) : dh / abs(h[i])
                 end
+                er = sum(rel) / length(rel)
             end
             @info "iter = $count, obj = $(round.(objHist[end]; digits=3)), constr_vio_norm = $(round(norm(currentConstr), digits=3)), er = $(round(er, digits=3))"
         end
@@ -299,6 +321,10 @@ end
 
 function Workspace(model::VecModel, optimizer::TOBSAlg, x0::AbstractVector; kwargs...)
     return TOBSWorkspace(model, x0; kwargs...)
+end
+
+function Workspace(model::VecModel, optimizer::TOBSAlg; kwargs...)
+    return TOBSWorkspace(model; kwargs...)
 end
 
 end
