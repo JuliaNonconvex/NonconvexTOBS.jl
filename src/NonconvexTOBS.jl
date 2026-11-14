@@ -200,7 +200,6 @@ function optimize!(workspace::TOBSWorkspace)
         Δ = map(currentConstr) do c
             return c < 0 ? -c : (constrRelax - 1) * c
         end
-        JuMP.@constraint(m, jacConstr * deltaX .<= Δ)
         # Objective: normally minimize the linearized objective. After too many
         # infeasible subproblems, switch to a feasibility-restoration phase that
         # minimizes the L1 norm of the *positive* (violated) part of the
@@ -208,13 +207,17 @@ function optimize!(workspace::TOBSWorkspace)
         # violated constraints down the most, ignoring the original objective.
         restore = infeasible_count >= maxInfeasible
         if restore
-            # Artificial slack for each constraint (>= positive violation).
+            # The relaxation schedule is what made the normal subproblem
+            # infeasible, so the restoration phase drops it: the artificial
+            # slack pays only for the remaining *positive* violation of the
+            # linearized constraints, subject to the move limit alone.
             JuMP.@variable(m, violSlack[1:length(currentConstr)] >= 0)
-            # linearized constraint value + slack >= 0  =>  slack >= -(c + jac*dx)
-            # i.e. slack captures any remaining (positive) violation after the step.
-            JuMP.@constraint(m, violSlack .>= -(currentConstr + jacConstr * deltaX))
+            # slack >= c + jac*dx: the slack captures any remaining (positive)
+            # violation after the step.
+            JuMP.@constraint(m, violSlack .>= currentConstr + jacConstr * deltaX)
             JuMP.@objective(m, Min, sum(violSlack))
         else
+            JuMP.@constraint(m, jacConstr * deltaX .<= Δ)
             JuMP.@objective(m, Min, objgrad' * deltaX)
         end
         # Optimize linearized problem
