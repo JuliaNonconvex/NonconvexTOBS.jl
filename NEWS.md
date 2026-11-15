@@ -1,5 +1,8 @@
 # NEWS
 
+## 0.3.3
+
+- Solver settings now use the MOI-generic `JuMP.set_silent`/`JuMP.set_time_limit_sec`, so the pluggable `optimizer` option is honored.\n- Non-finite constraint values fail fast with a clear `ArgumentError` instead of a NaN MILP rhs.
 ## 0.3.2
 
 - Fixed the feasibility-restoration phase: the slack constraint now prices
