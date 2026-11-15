@@ -1,5 +1,13 @@
 # NEWS
 
+## 0.3.2
+
+- Fixed the feasibility-restoration phase: the slack constraint now prices
+  the remaining positive violation (`violSlack >= c + J·dx` instead of the
+  reversed sign) and the phase drops the relaxation schedule (which is what
+  made the normal subproblem infeasible), so it actually finds the
+  violation-reducing flips. Added a regression test and this NEWS file.
+
 ## 0.3.1
 
 - Hardened step application and convergence tracking: a failed or unknown
