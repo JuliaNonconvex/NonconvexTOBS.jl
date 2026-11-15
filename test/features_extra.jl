@@ -172,6 +172,35 @@ end
     @test r.minimum ≈ -2.0 atol = 1e-8
 end
 
+@testitem "TOBSAlg: feasibility-restoration actually removes violations" begin
+    using NonconvexTOBS, Test
+    # Regression test: the restoration slack constraint used to be
+    # `violSlack .>= -(c + J*dx)`, which any non-negative slack (in
+    # particular 0, with dx = 0) satisfies — so the phase could never move.
+    # The fixed form `violSlack .>= c + J*dx` prices the remaining positive
+    # violation, and the phase drops the relaxation schedule (which is what
+    # made the normal subproblem infeasible), so the flips that reduce the
+    # violation most are actually taken.
+    #
+    # The two constraints demand contradictory x[1] moves in every
+    # linearization (c1 wants x[1] up, c2 wants x[1] down), so the normal
+    # subproblem stays infeasible no matter how the move limit escalates.
+    # Only the restoration phase (which ignores the relaxation schedule and
+    # minimizes the positive part of the residual) can make progress, by
+    # flipping x[2]: the violation drops from (1.5, 0.5) to (0.5, 0.5).
+    m = Model(x -> -sum(x))
+    addvar!(m, zeros(2), ones(2))
+    setinteger!(m, 1:2, [true, true])
+    add_ineq_constraint!(m, x -> 1.5 - x[1] - x[2])
+    add_ineq_constraint!(m, x -> 0.5 + x[1])
+    options = TOBSOptions(
+        movelimit=0.4, constrRelax=0.8, maxInfeasible=2, maxiter=15, timeLimit=5.0
+    )
+    r = optimize(m, TOBSAlg(), [0.0, 0.0], options=options)
+    @test sum(r.minimizer) ≈ 1.0 atol = 1e-8 # the restoration phase flipped a variable
+    @test r.minimum ≈ -1.0 atol = 1e-8 # ... and improved the objective (bug: stayed 0)
+end
+
 @testitem "TOBSAlg: continuous variables are rejected, not silently frozen" begin
     using NonconvexTOBS, Test
     # The design steps `deltaX` are `JuMP.Int`: a continuous variable at
