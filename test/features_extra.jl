@@ -201,6 +201,35 @@ end
     @test r.minimum ≈ -1.0 atol = 1e-8 # ... and improved the objective (bug: stayed 0)
 end
 
+@testitem "TOBSAlg: non-finite constraint values fail fast with a clear error" begin
+    using NonconvexTOBS, NonconvexCore, Test
+    # Regression test: a NaN constraint value used to poison the linearized
+    # right-hand side Δ and fail inside the MILP solver with an opaque
+    # error. The guard before the subproblem build must throw a clear
+    # ArgumentError instead. At the start point NonconvexCore's own
+    # `check_finite_start!` precheck fires first when going through
+    # `optimize`, so the TOBS guard is exercised through the workspace
+    # entry point (it also protects against NaN appearing at later
+    # iterates).
+    m = Model(x -> -sum(x))
+    addvar!(m, zeros(2), ones(2))
+    setinteger!(m, 1:2, [true, true])
+    # NaN at every point (including the start point); the model is otherwise
+    # a valid binary NLP.
+    add_ineq_constraint!(m, x -> [NaN * x[1] + x[2] - 1])
+    vm, x0v, _ = NonconvexCore.tovecmodel(m, [0.0, 0.0])
+    w = Workspace(vm, TOBSAlg(), x0v; options=TOBSOptions(timeLimit=5.0))
+    err = try
+        NonconvexCore.optimize!(w)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("non-finite", err.msg)
+    @test occursin("current iterate", err.msg)
+end
+
 @testitem "TOBSAlg: continuous variables are rejected, not silently frozen" begin
     using NonconvexTOBS, Test
     # The design steps `deltaX` are `JuMP.Int`: a continuous variable at
