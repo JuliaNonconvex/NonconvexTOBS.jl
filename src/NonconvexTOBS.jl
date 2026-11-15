@@ -165,8 +165,11 @@ function optimize!(workspace::TOBSWorkspace)
     infeasible_count = 0
     while (convParam < er || any(currentConstr .> 0)) && count < maxiter
         count > 0 && (m = JuMP.Model(milp_solver))
-        JuMP.set_optimizer_attribute(m, "log_to_console", false)
-        JuMP.set_optimizer_attribute(m, "time_limit", timeLimit)
+        # MOI-generic setters so that any JuMP-supported optimizer can be
+        # plugged in via `TOBSOptions.optimizer` (HiGHS-specific raw
+        # attribute names would error for other optimizers).
+        JuMP.set_silent(m)
+        JuMP.set_time_limit_sec(m, timeLimit)
         if !skip_step || count == 0
             if count > 0
                 currentConstr, jacConstr = NonconvexCore.value_jacobian(
@@ -182,6 +185,15 @@ function optimize!(workspace::TOBSWorkspace)
             end
         end
         skip_step = false
+        # A non-finite constraint value poisons the linearized right-hand
+        # side `Δ` below with NaN and fails inside the MILP solver with an
+        # opaque error; fail fast with a clear message instead.
+        all(isfinite, currentConstr) || throw(
+            ArgumentError(
+                "The constraint functions returned non-finite values (NaN or Inf) " *
+                "at the current iterate; TOBS cannot linearize the constraints.",
+            ),
+        )
         # Define optimization subproblem variables (change in each variable of original problem for this iteration)
         JuMP.@variable(m, deltaX[1:numVars], Int)
         JuMP.set_lower_bound.(deltaX, -x)
