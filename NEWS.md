@@ -1,5 +1,10 @@
 # NEWS
 
+## 0.3.4
+
+- Fractional binary starts are rejected with a clear error instead of
+  being silently frozen (the integer design steps admit only 0).
+
 ## 0.3.3
 
 - Solver settings now use the MOI-generic `JuMP.set_silent`/`JuMP.set_time_limit_sec`, so the pluggable `optimizer` option is honored.\n- Non-finite constraint values fail fast with a clear `ArgumentError` instead of a NaN MILP rhs.
