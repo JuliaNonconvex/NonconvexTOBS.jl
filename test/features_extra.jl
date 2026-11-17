@@ -250,3 +250,30 @@ end
     )
     @test r.minimum ≈ -1.0 atol = 1e-8
 end
+
+@testitem "TOBSAlg: fractional binary starts are rejected, not silently frozen" begin
+    using NonconvexTOBS, Test
+
+    # Regression test: the design steps are JuMP.Int, so a binary variable
+    # at x = 0.5 only permits the move 0 and would be silently frozen. The
+    # solve must fail fast with a clear error instead.
+    m = Model(x -> -sum(x))
+    addvar!(m, zeros(2), ones(2))
+    setinteger!(m, 1:2, [true, true])
+    add_ineq_constraint!(m, x -> sum(x) - 1)
+    @test_throws ArgumentError optimize(
+        m, TOBSAlg(), [0.5, 0.0], options=TOBSOptions(maxiter=5, timeLimit=5.0)
+    )
+    # Binary-valued starts are accepted (which variable flips is a solver
+    # tie-break; only the optimum is asserted). The move limit must allow a
+    # full flip: with the default 0.4 no flip fits and the solve stops at
+    # the feasible start.
+    r = optimize(
+        m,
+        TOBSAlg(),
+        [0.0, 0.0],
+        options=TOBSOptions(movelimit=0.5, maxiter=5, timeLimit=5.0),
+    )
+    @test sum(r.minimizer) ≈ 1.0 atol = 1e-8
+    @test r.minimum ≈ -1.0 atol = 1e-8
+end
