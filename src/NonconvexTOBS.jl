@@ -143,6 +143,15 @@ function optimize!(workspace::TOBSWorkspace)
     if any(NonconvexCore.getmin(model) .!= 0) || any(NonconvexCore.getmax(model) .!= 1)
         throw(ArgumentError("Lower bound must be 0 and upper bound must be 1."))
     end
+    if any(Bool.(model.integer) .& (x0 .!= 0) .& (x0 .!= 1))
+        throw(
+            ArgumentError(
+                "TOBS requires binary variables to start at 0 or 1: the design " *
+                "steps are integer, so a fractional start (e.g. 0.5) admits " *
+                "only 0 and the variable would be silently frozen.",
+            ),
+        )
+    end
     if length(model.eq_constraints.fs) != 0
         throw(
             ArgumentError(
