@@ -3,8 +3,20 @@ modules = ["NonconvexTOBS"]
 doctest_setup = "using NonconvexTOBS"
 
 [[pages]]
-title = "TOBS"
+title = "Introduction"
 file = "index.md"
+
+[[pages]]
+title = "Construct an instance"
+file = "construct.md"
+
+[[pages]]
+title = "Example"
+file = "example.md"
+
+[[pages]]
+title = "Options"
+file = "options.md"
 
 [[pages]]
 title = "Theory"
