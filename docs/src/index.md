@@ -1,4 +1,4 @@
-# Topology optimization of binary structures (TOBS), a nonlinear binary optimization heuristic 
+# NonconvexTOBS
 
 ![JuliaNonconvex logo](https://raw.githubusercontent.com/JuliaNonconvex/NonconvexTOBS.jl/main/docs/src/assets/logo.png)
 
