@@ -1,4 +1,4 @@
-name = "TOBS"
+name = "NonconvexTOBS"
 modules = ["NonconvexTOBS"]
 doctest_setup = "using NonconvexTOBS"
 
