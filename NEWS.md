@@ -1,5 +1,8 @@
 # NEWS
 
+## 0.3.5
+
+- Docs: package-name section titles and left-aligned logos (no code changes).
 ## 0.3.4
 
 - Fractional binary starts are rejected with a clear error instead of
