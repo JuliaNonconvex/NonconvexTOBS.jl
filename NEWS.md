@@ -1,5 +1,8 @@
 # NEWS
 
+## 0.3.6
+
+- Docs: the logo now appears only in the sidebar, not in the page body.
 ## 0.3.5
 
 - Docs: package-name section titles and left-aligned logos (no code changes).
